@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "servidor.js",
   "scripts": {
+   "scripts": {
     "start": "node servidor.js"
   },
   "dependencies": {
