@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Carrera Infinita - UVIEDA PRO</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        :root { --neon-blue: #00e5ff; --neon-pink: #ff0055; --neon-purple: #9d00ff; --neon-yellow: #ffea00; }
+        body { margin: 0; padding: 0; background: #0d0a20; color: white; font-family: 'Montserrat', sans-serif; overflow: hidden; display: flex; height: 100vh; }
+
+        /* BLOQUEO DE SEGURIDAD */
+        #overlay-lock { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .lock-card { background: rgba(20, 20, 20, 0.95); border: 3px solid var(--neon-pink); box-shadow: 0 0 30px var(--neon-pink); border-radius: 20px; padding: 40px; text-align: center; width: 450px; }
+        .input-key { width: 100%; padding: 15px; margin: 10px 0; background: #111; border: 1px solid var(--neon-blue); color: var(--neon-blue); border-radius: 8px; font-size: 18px; text-align: center; box-sizing: border-box; outline: none; }
+        .btn-activate { background: var(--neon-pink); color: white; border: none; padding: 15px 30px; width: 100%; font-weight: bold; font-size: 18px; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-top: 10px; box-shadow: 0 0 15px var(--neon-pink); }
+        .btn-activate:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px var(--neon-blue); }
+        .hwid-tag { font-size: 11px; color: #555; margin-top: 15px; letter-spacing: 1px; }
+
+        /* JUEGO */
+        #game-content { display: none; width: 100%; height: 100%; display: flex; opacity: 0; transition: opacity 1s; }
+        #left-panel { width: 300px; background: rgba(10, 8, 25, 0.9); border-right: 3px solid var(--neon-pink); padding: 15px; z-index: 100; }
+        .panel-box { border: 2px solid var(--neon-purple); border-radius: 10px; padding: 10px; margin-bottom: 20px; background: rgba(0,0,0,0.5); }
+        #main-area { flex-grow: 1; position: relative; display: flex; flex-direction: column; }
+        #track-container { flex-grow: 1; position: relative; overflow: hidden; perspective: 1000px; }
+        #track-grid { position: absolute; width: 200%; height: 100%; bottom: 0; left: 0; background-image: linear-gradient(rgba(0, 229, 255, 0.2) 2px, transparent 2px), linear-gradient(90deg, rgba(0, 229, 255, 0.2) 2px, transparent 2px); background-size: 80px 80px; transform: rotateX(45deg); animation: moveGrid 1s linear infinite; }
+        @keyframes moveGrid { from { transform: rotateX(45deg) translateX(0); } to { transform: rotateX(45deg) translateX(-80px); } }
+        
+        .corredor { position: absolute; transition: left 0.5s ease-out; display: flex; flex-direction: column; align-items: center; }
+        .carro-img { font-size: 55px; filter: drop-shadow(0 0 10px var(--neon-blue)); transition: transform 0.2s; }
+        .player-tag { background: rgba(0,0,0,0.8); border: 1px solid var(--neon-blue); border-radius: 10px; padding: 2px 8px; font-size: 11px; margin-top: -5px; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <div id="overlay-lock">
+        <div class="lock-card">
+            <h1 style="color: var(--neon-blue); margin: 0;">UVIEDA PRO</h1>
+            <p>Ingresa tu <b>LLAVE DE ACCESO</b> para activar el equipo.</p>
+            <input type="text" id="user-tiktok" class="input-key" placeholder="Tu Usuario de TikTok">
+            <input type="text" id="license-key" class="input-key" placeholder="Llave de Acceso">
+            <button class="btn-activate" onclick="validarAcceso()">ACTIVAR JUEGO</button>
+            <div class="hwid-tag" id="hwid-display">ID EQUIPO: CARGANDO...</div>
+        </div>
+    </div>
+
+    <div id="game-content">
+        <div id="left-panel">
+            <div class="panel-box"><h3 style="color:var(--neon-yellow); text-align:center;">LÍDERES</h3><div id="vips-container"></div></div>
+        </div>
+        <div id="main-area">
+            <div id="track-container"><div id="track-grid"></div><div id="race-area"></div></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const hwid = "UVIEDA-" + btoa(navigator.platform + navigator.language).substring(0, 10).toUpperCase();
+        document.getElementById('hwid-display').innerText = "ID EQUIPO: " + hwid;
+
+        // LISTA DE DIFERENTES VEHÍCULOS
+        const modelosCarros = ['🚗', '🏎️', '🚓', '🚕', '🚙', '🏎', '🚐', '🚚'];
+        const coloresNeon = ['var(--neon-blue)', 'var(--neon-pink)', 'var(--neon-yellow)', 'var(--neon-purple)', '#00ff00'];
+
+        function validarAcceso() {
+            const key = document.getElementById('license-key').value;
+            const user = document.getElementById('user-tiktok').value.replace('@','');
+            if(user === "" || key === "") { alert("Campos vacíos"); return; }
+            socket.emit('auth-juego', { tiktokUser: user, referencia: key });
+        }
+
+        socket.on('update-game', (estado) => {
+            document.getElementById('overlay-lock').style.display = 'none';
+            const game = document.getElementById('game-content');
+            game.style.display = 'flex';
+            setTimeout(() => game.style.opacity = "1", 100);
+
+            const raceArea = document.getElementById('race-area');
+            raceArea.innerHTML = '';
+            
+           Object.values(estado.corredores).forEach((c, i) => {
+                const div = document.createElement('div');
+                div.className = 'corredor';
+                div.style.top = `${10 + (i * 9)}%`;
+                div.style.left = `${Math.min((c.puntos / 1000) * 10, 85)}%`;
+
+                // Asignar un modelo y color basado en la posición
+                const modeloIndex = i % modelosCarros.length;
+                const colorIndex = i % coloresNeon.length;
+                
+                div.innerHTML = `
+                    <div class="carro-img" style="filter: drop-shadow(0 0 10px ${coloresNeon[colorIndex]});">
+                        ${modelosCarros[modeloIndex]}
+                    </div>
+                    <div class="player-tag" style="border-color: ${coloresNeon[colorIndex]}">
+                        ${c.nombre}
+                    </div>`;
+                raceArea.appendChild(div);
+            });
+        });
+
+        socket.on('error-auth', (msg) => { 
+            alert(msg); 
+        });
+    </script>
+</body>
+</html>
